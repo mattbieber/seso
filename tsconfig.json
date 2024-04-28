@@ -1,0 +1,12 @@
+{
+    "include": ["solution/**/*"],
+    "exclude": ["node_modules/**/*"],
+    "compilerOptions": {
+        "allowJs": true,
+        "declaration": true,
+        "emitDeclarationOnly": true,
+        "skipLibCheck": true,
+        "declarationMap": true,
+        "target": "ES2020"
+    }
+}
