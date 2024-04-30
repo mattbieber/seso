@@ -34,72 +34,84 @@ module.exports = (logSources, printer) => {
          * @type {Set<number>} logSourcesRemaining
          * */
         const logSourcesRemaining = new Set()
-
         const pq = new PQ()
 
-        const processLogs = async () => {
-            let minLogEntry
-            while ((minLogEntry = pq.pop())) {
-                printer.print(minLogEntry)
-                let sourceId = minLogEntry.logSourceId
+        const MAX_LENGTH = 10000
 
-                /** @type {LogEntry | false } tryNewEntry */
-                const tryNewEntry = await logSources[sourceId].popAsync()
-                
-                if (tryNewEntry) {
-                    tryNewEntry.logSourceId = sourceId
-                    pq.push(tryNewEntry)
-                } 
-                else {
-                    /**
-                     * got false from pop() operation indicating source is drained
-                     * try new source Id
-                     */
-                    logSourcesRemaining.delete(sourceId)
-                    if (logSourcesRemaining.size === 0) return
+        const sourceCount = logSources.length
 
-                    const logSourceId = logSourcesRemaining
-                        .values()
-                        .next().value
-
-                    /** @type {LogEntry | false} logEntry */
-                    const newSourceEntry =
-                        await logSources[logSourceId].popAsync()
-
-                    if (newSourceEntry) {
-                        newSourceEntry.logSourceId = logSourceId
-                        pq.push(newSourceEntry)
-                    }
-                }
-            }
-        }
-        
-        const addInitialEntries = async (logSourceIndex) => {
-            try {
+        const getFromLogSource = (logSourceIndex) => {
+            return new Promise((resolve, reject) => {
                 /** @type {LogEntry | false} logEntry */
-                const logEntry = await logSources[logSourceIndex].popAsync()
+                logSources[logSourceIndex].popAsync().then((logEntry) => {
+                    if (logEntry) {
+                        logEntry.logSourceId = logSourceIndex
+                        logSourcesRemaining.add(logSourceIndex)
+                        pq.push(logEntry)
+                    } else {
+                        /**
+                         * got false from pop() operation indicating source is drained
+                         * try new source Id
+                         */
+                        console.log(`source drained: ${logSourceIndex}`)
+                        logSourcesRemaining.delete(logSourceIndex)
+                        if (logSourcesRemaining.size > 0) {
+                            const logSourceId = logSourcesRemaining
+                                .values()
+                                .next().value
 
-                if (logEntry) {
-                    /** tag the entry with the logSourceIndex so we can track exhausted sources */
-                    logEntry.logSourceId = logSourceIndex
-                    logSourcesRemaining.add(logEntry.logSourceId)
-                    pq.push(logEntry)
-                } 
-            } catch (err) {
-                console.error(err)
-            }
+                            /** @type {LogEntry | false} newSourceEntry */
+                            logSources[logSourceId]
+                                .popAsync()
+                                .then((newSourceEntry) => {
+                                    if (newSourceEntry) {
+                                        newSourceEntry.logSourceId = logSourceId
+                                        pq.push(newSourceEntry)
+                                    }
+                                })
+                        }
+                    }
+                    resolve()
+                })
+            })
+        }
 
-            if (pq.len === logSources.length) {
-                await processLogs()
+        const processLogs = () => {
+            if (logSourcesRemaining.size === 0) {
                 console.log('Async sort complete.')
                 printer.done()
                 return
             }
-        }
 
-        for (const [logSourceIndex, logSource] of logSources.entries()) {
-            addInitialEntries(logSourceIndex)
-        }
+            const minLogEntry = pq.pop()
+            printer.print(minLogEntry)
+            let sourceId = minLogEntry.logSourceId
 
+            if (pq.len < MAX_LENGTH) {
+                const jobs = []
+                logSourcesRemaining.forEach((n) => {
+                    jobs.push(
+                        new Promise((resolve, reject) => {
+                            getFromLogSource(n).then(() => resolve())
+                        }),
+                    )
+                })
+
+                Promise.all(jobs).then(() => {
+                    processLogs()
+                })
+            } else {
+                /** @type {LogEntry | false } tryNewEntry */
+                getFromLogSource(sourceId).then(() => {
+                    processLogs()
+                })
+            }
+        }
+        /** start with adding log entries from all log sources concurrently */
+        return Promise.all(logSources.map((_, i) => getFromLogSource(i))).then(
+            () => {
+                processLogs()
+            },
+        )
     })
 }

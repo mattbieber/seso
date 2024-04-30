@@ -54,7 +54,8 @@ declare class PQ {
      */
     swap(i: number, j: number): void;
     orderUp(): void;
-    orderDown(): void;
+    orderDown(currentNodeIndex: any): void;
+    heapify(): void;
 }
 declare namespace PQ {
     export { LogEntry };

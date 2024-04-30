@@ -18,9 +18,10 @@ class LogEntryNode {
 }
 
 module.exports = class PQ {
-    constructor() {
+    constructor(maxSize = 10000) {
         /**  @type {LogEntryNode[]} items */
         this.items = []
+        this.maxSize = maxSize
     }
 
     get len() {
@@ -28,7 +29,7 @@ module.exports = class PQ {
     }
 
     isEmpty() {
-        return this.items.length > 1
+        return this.items.length === 0
     }
 
     /**
@@ -47,7 +48,7 @@ module.exports = class PQ {
 
         const node = this.items[0]
         this.items[0] = this.items.pop()
-        this.orderDown()
+        this.orderDown(0)
 
         return node.value
     }
@@ -55,6 +56,7 @@ module.exports = class PQ {
     /**  @param {LogEntry} value */
     push(value) {
         const nodeEntry = new LogEntryNode(value)
+        
         this.items.push(nodeEntry)
         this.orderUp()
     }
@@ -158,8 +160,9 @@ module.exports = class PQ {
     }
 
     
-    orderDown() {
-        let currentNodeIndex = 0
+    orderDown(i) {
+       
+        let currentNodeIndex = i
         let childIndex = this.getMinChildIndex(currentNodeIndex)
 
         while (
@@ -172,5 +175,14 @@ module.exports = class PQ {
             childIndex = this.getMinChildIndex(currentNodeIndex)
         }
     }
+
+    heapify() {
+        let lastWithChildren = Math.floor(this.items.length / 2)
+        while(lastWithChildren >= 0) {
+            this.orderDown(lastWithChildren)
+            lastWithChildren--
+        }
+    }
+ 
 
 }
